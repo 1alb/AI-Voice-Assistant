@@ -1,0 +1,206 @@
+{
+  "name": "Customer Support Voice Agent upload",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -320,
+        80
+      ],
+      "id": "c8510c41-7326-4d9e-aacf-695a11b45993",
+      "name": "Webhook1",
+      "webhookId": "f957fa2d-6d73-495f-822e-217f9a32b9b3"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        48,
+        80
+      ],
+      "id": "42d5b128-b653-4d81-9f32-f12739e31a74",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: \"success\", message: \"Knowledge base updated\" } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1168,
+        96
+      ],
+      "id": "6a1162a1-01ec-474a-8a5c-9f5330f216d9",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.documents || $json.text || $json.data || \"\";\n\nlet text = \"\";\n\nif (Array.isArray(input)) {\n  text = input\n    .filter(x => typeof x === \"string\")\n    .join(\"\\n\\n\");\n} else {\n  text = String(input);\n}\n\nreturn [\n  {\n    json: {\n      text,\n      source: \"uploaded_pdf\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        80
+      ],
+      "id": "5a81b816-fcec-4d6e-8216-37fa31cf77f5",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "company_knowledge",
+          "mode": "list",
+          "cachedResultName": "company_knowledge"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        80
+      ],
+      "id": "9f9e7143-3af5-42a3-b7e2-85a2912b260b",
+      "name": "Qdrant Vector Store1",
+      "credentials": {
+        "qdrantApi": {
+          "id": "P1vJqlYiuFpeg2FR",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        928,
+        320
+      ],
+      "id": "ab532194-2114-4724-82f7-8ff2b5e316c2",
+      "name": "Default Data Loader1"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        704,
+        320
+      ],
+      "id": "64d06954-7b4d-480d-b08a-ba0e249bd050",
+      "name": "Embeddings Google Gemini1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "dsss1kiPgz9ydQae",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Vector Store1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Vector Store1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader1": {
+      "ai_document": [
+        [
+          {
+            "node": "Qdrant Vector Store1",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a494adf1-7c7f-4ff6-8459-dbb337157ba1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f42be1e9bbb144780f2d7a641ca9bec33e26feef127405a5231d8702bc9233f5"
+  },
+  "nodeGroups": [],
+  "id": "SLoeD7NVtTpIeAhk",
+  "tags": []
+}

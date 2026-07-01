@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI Assistant</title>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    max-width:900px;
+    margin:40px auto;
+    padding:20px;
+}
+
+textarea{
+    width:100%;
+    height:90px;
+    padding:10px;
+    font-size:16px;
+}
+
+button{
+    padding:10px 18px;
+    margin-top:10px;
+    cursor:pointer;
+}
+
+.response{
+    margin-top:20px;
+    padding:15px;
+    border:1px solid #ddd;
+    border-radius:8px;
+    white-space:pre-wrap;
+}
+</style>
+
+</head>
+
+<body>
+
+
+<h2>🤖 AI Assistant</h2>
+
+
+<textarea
+id="question"
+placeholder="Ask me anything...
+Examples:
+• Latest AI news
+• What does my PDF say?
+"></textarea>
+
+
+<br>
+
+<button onclick="askAssistant()">
+Send
+</button>
+
+
+<p id="status">
+Idle
+</p>
+
+
+<div id="answer" class="response"></div>
+
+
+<hr>
+
+
+<h3>📄 Upload Knowledge Base PDF</h3>
+
+
+<input
+type="file"
+id="pdfFile"
+accept=".pdf">
+
+
+<button onclick="uploadPDF()">
+Upload PDF
+</button>
+
+
+<p id="uploadStatus">
+Upload: Idle
+</p>
+
+
+
+<script>
+
+
+// AI QUESTION WEBHOOK
+const assistantWebhook =
+"https://monishagaur.app.n8n.cloud/webhook-test/Customer-Support";
+
+
+// PDF UPLOAD WEBHOOK
+// PUT YOUR PDF WEBHOOK URL HERE
+const uploadWebhook =
+"https://monishagaur.app.n8n.cloud/webhook/upload";
+
+
+
+// -------- ASK AI --------
+
+
+function askAssistant(){
+
+const question =
+document.getElementById("question").value.trim();
+
+
+if(!question){
+return;
+}
+
+
+document.getElementById("status").innerText =
+"Thinking...";
+
+
+
+fetch(assistantWebhook,{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+
+question:question
+
+})
+
+})
+
+
+.then(res=>res.json())
+
+.then(data=>{
+
+
+console.log(data);
+
+
+
+let answer =
+data.answer ||
+data.output ||
+data.text ||
+data.message ||
+JSON.stringify(data);
+
+
+
+document.getElementById("status").innerText =
+"Done";
+
+
+document.getElementById("answer").innerText =
+answer;
+
+
+
+})
+
+
+.catch(error=>{
+
+
+console.log(error);
+
+
+document.getElementById("status").innerText =
+"Error";
+
+
+document.getElementById("answer").innerText =
+error.message;
+
+
+});
+
+
+}
+
+
+
+
+// ENTER BUTTON
+
+
+document
+.getElementById("question")
+.addEventListener("keydown",function(e){
+
+
+if(e.key==="Enter" && !e.shiftKey){
+
+e.preventDefault();
+
+askAssistant();
+
+}
+
+
+});
+
+
+
+
+// -------- UPLOAD PDF --------
+
+
+async function uploadPDF(){
+
+
+
+const fileInput =
+document.getElementById("pdfFile");
+
+
+const file =
+fileInput.files[0];
+
+
+
+if(!file){
+
+
+document.getElementById("uploadStatus").innerText =
+"Choose PDF first";
+
+
+return;
+
+}
+
+
+
+
+const formData =
+new FormData();
+
+
+
+formData.append(
+"file",
+file
+);
+
+
+
+document.getElementById("uploadStatus").innerText =
+"Uploading...";
+
+
+
+
+try{
+
+
+const response =
+await fetch(uploadWebhook,{
+
+method:"POST",
+
+body:formData
+
+});
+
+
+
+const data =
+await response.json();
+
+
+
+console.log(data);
+
+
+
+document.getElementById("uploadStatus").innerText =
+"PDF uploaded successfully";
+
+
+}
+
+
+
+catch(error){
+
+
+console.log(error);
+
+
+document.getElementById("uploadStatus").innerText =
+"Upload failed";
+
+
+}
+
+
+}
+
+
+
+</script>
+
+
+</body>
+</html>
