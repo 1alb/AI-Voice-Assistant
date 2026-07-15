@@ -1,0 +1,807 @@
+{
+  "name": "My workflow 23",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const results = $json.results || [];\n\nlet context = \"\";\n\nfor (let i = 0; i < results.length; i++) {\n  const r = results[i];\n\n  context += `\nSource ${i + 1}\nTitle: ${r.title || \"\"}\nURL: ${r.url || \"\"}\nSnippet: ${r.content || r.raw_content || \"\"}\n`;\n}\n\nreturn [\n  {\n    json: {\n      query: $json.query || $('Switch').first().json.query,\n      research_context: context,\n      knowledge_context: \"\"\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        64
+      ],
+      "id": "9fb28d8d-8bd8-45a3-bfe5-5f8f051399f3",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"api_key\": \"YOUR_TAVILY_API_KEY\",\n  \"query\": \"{{ $json.query }}\",\n  \"search_depth\": \"basic\",\n  \"max_results\": 5\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1488,
+        160
+      ],
+      "id": "2760da5d-2f9f-4965-824c-87232724cf98",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2864,
+        496
+      ],
+      "id": "3e3c6ba6-8553-4de7-9937-970773dde3a1",
+      "name": "Webhook",
+      "webhookId": "bb44a611-0542-422b-a87b-5a970576214b"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"response_format\": {\n    \"type\": \"json_object\"\n  },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an intelligent routing assistant. Choose exactly one route: research_chatbot, knowledge_base, or hybrid.\\n\\nresearch_chatbot:\\nUse this for public information, general knowledge, web search, news, current events, trends, prices, weather, competitors, market information, best practices, examples, or anything likely outside the uploaded documents.\\n\\nknowledge_base:\\nUse this for anything that could reasonably be answered from uploaded files, PDFs, documents, presentations, manuals, reports, company information, policies, FAQs, contracts, technical documentation, or private/internal knowledge. Do NOT require the user to say 'knowledge base', 'PDF', or 'uploaded document'. If the query mentions a specific company/topic that may exist in uploaded files, choose knowledge_base.\\n\\nhybrid:\\nUse this when the user wants comparison, validation, benchmarking, updating, cross-checking, or combining uploaded/internal knowledge with public/web/current information.\\n\\nImportant routing logic:\\n- If the user asks about a topic likely present in uploaded files, choose knowledge_base even if they do not say 'from the knowledge base'.\\n- If the user asks for latest/current/news/today/web/search/trends, choose research_chatbot unless they also refer to internal/uploaded/company information.\\n- If the query combines internal/company/uploaded knowledge with trends/current/web/comparison, choose hybrid.\\n\\nExamples:\\n{\\\"route\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"Tell me about Nutanix briefly\\\"}\\n{\\\"route\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"What is AcmeAI's refund policy\\\"}\\n{\\\"route\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"Summarize the uploaded presentation\\\"}\\n{\\\"route\\\":\\\"research_chatbot\\\",\\\"query\\\":\\\"Tell me about IPL news\\\"}\\n{\\\"route\\\":\\\"research_chatbot\\\",\\\"query\\\":\\\"What are ecommerce return policy best practices\\\"}\\n{\\\"route\\\":\\\"hybrid\\\",\\\"query\\\":\\\"Compare AcmeAI's refund policy with ecommerce return trends\\\"}\\n{\\\"route\\\":\\\"hybrid\\\",\\\"query\\\":\\\"Is our pricing competitive with current market options\\\"}\\n\\nReturn ONLY valid JSON. No markdown. Format: {\\\"route\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"cleaned user query\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $('Webhook').item.json.body.question }}\"\n    }\n  ],\n  \"temperature\": 0\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2400,
+        432
+      ],
+      "id": "a1114ee7-1817-420d-bf95-6a992b991836",
+      "name": "AI Router"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the raw response from Groq\nlet raw = $json.choices[0].message.content || \"\";\n\n// Remove markdown code fences if present\nraw = raw\n  .replace(/```json\\s*/gi, \"\")\n  .replace(/```\\s*/g, \"\")\n  .trim();\n\n// Parse the JSON\nlet parsed;\n\ntry {\n  parsed = JSON.parse(raw);\n} catch (err) {\n  throw new Error(\n    `Failed to parse router output.\\n\\nRaw response:\\n${raw}\\n\\nError: ${err.message}`\n  );\n}\n\n// Return clean output\nreturn [\n  {\n    json: {\n      route: parsed.route,\n      query: parsed.query\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2096,
+        464
+      ],
+      "id": "f3c62fa0-0376-40ac-88f4-25233ce0961b",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "research_chatbot",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "2d4e849c-0e4f-455c-8480-fdb441e1796f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "research_chatbot"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "3e6e5967-9653-4814-a675-f3ca6f1142eb",
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "knowledge_base",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "knowledge_base"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "79f29c30-087d-4b9d-804b-c186acd62cee",
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "hybrid",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "hybrid"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -1792,
+        368
+      ],
+      "id": "63a5a769-19c7-47af-b199-7f6f129da05e",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { answer: $json.content.parts[0].text } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -32,
+        -112
+      ],
+      "id": "c76e8981-f4e7-4093-9284-53ab5d075dfa",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://520f859b-55db-48af-8978-ee2cd79faced.us-west-2-0.aws.cloud.qdrant.io/collections/kb_base/points/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "YOUR_QDRANT_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  vector: $('Gemini Embedding').item.json.embedding.values,\n  limit: 5,\n  with_payload: true\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1072,
+        448
+      ],
+      "id": "0423ab1a-5bab-46ac-b0e0-6d6997c54392",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"models/gemini-embedding-001\",\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{ $json.query }}\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1376,
+        432
+      ],
+      "id": "f2a9a675-36e2-4120-a8cc-555bd294c70f",
+      "name": "Gemini Embedding"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json.result || [];\n\nconst context = results.map((r, i) => {\n  const payload = r.payload || {};\n\n  return `Document ${i + 1}\n${payload.pageContent || payload.text || payload.content || \"\"}`;\n}).join(\"\\n\\n\");\n\nreturn [\n  {\n    json: {\n      question: $('Code in JavaScript1').first().json.query,\n      context\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        432
+      ],
+      "id": "c8a852e1-80df-4f43-bc1c-7cfcbe0d3ff7",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a voice assistant.\n\nAnswer ONLY from the provided knowledge base.\n\nIf the answer is not present, say:\n\"I couldn't find that information in the uploaded knowledge base.\"\n\nQuestion:\n{{ $json.question }}\n\nKnowledge Base:\n{{ $json.context }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -272,
+        192
+      ],
+      "id": "cee212a2-4e1c-4260-90ad-74a2273d6c79",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "KXH2QSwJInt5QArq",
+          "name": "Google Gemini(PaLM) Api account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { answer: $json.content.parts[0].text } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        272,
+        144
+      ],
+      "id": "a81142d1-adcc-4f65-bf3d-d35f67857970",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a voice assistant.\n\nAnswer the user's question using the search results below.\n\nUser question:\n{{ $('Code in JavaScript1').first().json.query }}\n\nSearch results:\n{{ $json.research_context }}\n\nRules:\n- Give only the useful answer.\n- Do not speak URLs.\n- Do not mention website links.\n- Do not say \"according to source 1\".\n- Keep it short and conversational.\n- If there are multiple updates, summarize the top 3."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -608,
+        -80
+      ],
+      "id": "fa64886c-3d69-46de-9589-66293c751308",
+      "name": "Message a model1",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "KXH2QSwJInt5QArq",
+          "name": "Google Gemini(PaLM) Api account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { answer: $json.output[0].content[0].text } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        144,
+        528
+      ],
+      "id": "d4ba4d79-a48f-4fb1-ba1a-87ba1b65892f",
+      "name": "Respond to Webhook3"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are a hybrid assistant.\n\nAnswer the user using the provided Knowledge Base and Web Search context.\n\nCRITICAL RULE:\nIf the Knowledge Base contains a direct answer, you MUST use it. Do not say the knowledge base lacks information if the answer appears anywhere in the Knowledge Base.\n\nUser question:\n{{ $json.question }}\n\nKnowledge Base:\n{{ $json.knowledge_context }}\n\nWeb Search:\n{{ $json.research_context }}\n\nInstructions:\n1. First scan the Knowledge Base for direct matches.\n2. If the Knowledge Base says anything about the topic, state it clearly.\n3. Then optionally add web/current context if useful.\n4. Do not ignore short policy lines.\n5. Do not mention URLs.\n6. Keep the answer conversational.\n\nFor refund questions:\nIf the Knowledge Base contains \"Refunds within 14 days\", answer:\n\"The uploaded knowledge base says refunds are allowed within 14 days.\""
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        -496,
+        672
+      ],
+      "id": "274a61fb-edad-4dd4-a79b-d9dc1d03fa43",
+      "name": "Message a model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "Wpl0oqqa9KxcTAzi",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"api_key\": \"YOUR_TAVILY_API_KEY\",\n  \"query\": \"{{ $json.query }}\",\n  \"search_depth\": \"basic\",\n  \"max_results\": 5\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1360,
+        656
+      ],
+      "id": "e6b0093f-ee36-45ed-a8ae-fd9ef287d989",
+      "name": "HTTP Request3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json.results || [];\n\nlet context = \"\";\n\nfor (let i = 0; i < results.length; i++) {\n  const r = results[i];\n\n  context += `\nSource ${i + 1}\nTitle: ${r.title || \"\"}\nURL: ${r.url || \"\"}\nSnippet: ${r.content || r.raw_content || \"\"}\n`;\n}\n\nreturn [\n  {\n    json: {\n      query: $json.query || $('Switch').first().json.query,\n      research_context: context,\n      knowledge_context: \"\"\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        640
+      ],
+      "id": "2a5a21cb-83e1-4df2-93bd-85f490266a0a",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"models/gemini-embedding-001\",\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{ $json.query }}\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1568,
+        896
+      ],
+      "id": "728341e1-89c8-43d4-9d21-38c5ca6e89fc",
+      "name": "Gemini Embedding1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://520f859b-55db-48af-8978-ee2cd79faced.us-west-2-0.aws.cloud.qdrant.io/collections/kb_base/points/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "YOUR_QDRANT_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  vector: $('Gemini Embedding1').item.json.embedding.values,\n  limit: 5,\n  with_payload: true\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1328,
+        944
+      ],
+      "id": "017893e4-9416-40e5-9a1b-451011a6a931",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json.result || [];\n\nconst context = results.map((r, i) => {\n  const payload = r.payload || {};\n\n  return `Document ${i + 1}\n${payload.pageContent || payload.text || payload.content || \"\"}`;\n}).join(\"\\n\\n\");\n\nreturn [{\n  json: {\n    question: $input.first().json.question,\n    knowledge_context: context\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        928
+      ],
+      "id": "4df387fc-9886-42dd-a057-c4d342da4ebf",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1632,
+        672
+      ],
+      "id": "4cba2ac2-9667-4dd2-af45-da7d5f78e74f",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -928,
+        704
+      ],
+      "id": "999a39dc-cd7a-46a2-8a54-e2af8b1d7b8e",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst result = {\n  question: \"\",\n  research_context: \"\",\n  knowledge_context: \"\"\n};\n\nfor (const item of items) {\n  if (item.json.question) result.question = item.json.question;\n  if (item.json.query) result.question = item.json.query;\n\n  if (item.json.research_context)\n    result.research_context = item.json.research_context;\n\n  if (item.json.context)\n    result.knowledge_context = item.json.context;\n\n  if (item.json.knowledge_context)\n    result.knowledge_context = item.json.knowledge_context;\n}\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        704
+      ],
+      "id": "2b44b985-4398-4265-b3d6-7c50b196f010",
+      "name": "Code in JavaScript6"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Router": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embedding": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model2": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Embedding1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gemini Embedding1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript6": {
+      "main": [
+        [
+          {
+            "node": "Message a model2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c83fa837-c715-4b5f-93a5-9b22f6444821",
+  "meta": {
+    "instanceId": "6e4d4a70212d7b7ab6369367bab99633fb9645e9d4070edee05a48c34370ae23"
+  },
+  "nodeGroups": [],
+  "id": "LwGwmN3lvOvgiXw4",
+  "tags": []
+}
